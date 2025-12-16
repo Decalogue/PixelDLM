@@ -16,7 +16,7 @@ IMG_SIZE=64
 DATA_PATH="./data/train"
 TOKENIZER_PATH="/root/data/AI/pretrain/Qwen2.5-7B-Instruct"
 BATCH_SIZE=32  # 测试时使用较小的 batch size
-EPOCHS=1      # 只训练 1 个 epoch 用于测试
+EPOCHS=2      # 只训练 2 个 epoch 用于测试
 LR=5e-6  # 降低学习率以避免 loss=nan
 WEIGHT_DECAY=0.01
 WARMUP_EPOCHS=1  # 测试时减少 warmup
