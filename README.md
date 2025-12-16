@@ -126,7 +126,7 @@ RGB Colors: [(R, G, B), ...]
 
 ```
 随机噪声图像
-  ↓ DDIM 采样 (50 步)
+  ↓ DDIM 采样 (20 步)
 逐步去噪
   ↓ 解码颜色到 tokens
 Token IDs
@@ -197,28 +197,17 @@ Answer → 64×64 目标图像
 ### 安装依赖
 
 ```bash
-pip install torch transformers numpy opencv-python tqdm
+pip install -r requirements.txt
 ```
 
 ### 训练模型
 
-```bash
+```sh
 # 无条件生成（预训练）
-python train.py \
-    --data_path ./data/train \
-    --img_size 64 \
-    --model JiT-B/4 \
-    --batch_size 4 \
-    --epochs 100
+sh ./train.sh
 
 # 条件生成（微调）
-python train.py \
-    --data_path ./data/train \
-    --img_size 64 \
-    --model JiT-B/4 \
-    --enable_condition \
-    --batch_size 4 \
-    --epochs 50
+sh ./train_with_condition.sh
 ```
 
 ### 推理生成
@@ -233,7 +222,7 @@ tokenizer = AutoTokenizer.from_pretrained('Qwen2.5-7B-Instruct')
 
 # 无条件生成
 text = model.generate(
-    num_steps=50,
+    num_steps=20,
     guidance_scale=1.0,
     condition=None
 )
@@ -241,7 +230,7 @@ text = model.generate(
 # 条件生成
 text = model.generate(
     prompt="What is AI?",
-    num_steps=50,
+    num_steps=20,
     guidance_scale=2.0
 )
 ```
@@ -252,7 +241,7 @@ text = model.generate(
 
 - **模型大小**：128M 参数 (~0.5GB FP16)
 - **训练速度**：~1000 tokens/s (8×H200, batch_size=512)
-- **推理速度**：~50 步 DDIM 采样，<1 秒/样本
+- **推理速度**：~20 步 DDIM 采样，<1 秒/样本
 - **图像容量**：64×64 = 4096 tokens/图像
 
 ---
@@ -268,10 +257,20 @@ text = model.generate(
 
 ## 📚 相关文档
 
-- [模型配置说明](./docs/MODEL_CONFIG.md)
-- [统一架构设计](./docs/UNIFIED_ARCHITECTURE_DESIGN.md)
-- [训练时间估算](./docs/TRAINING_TIME_ESTIMATION.md)
-- [数据集设计](./docs/DATASET_DESIGN.md)
+### 核心文档
+
+- [模型架构设计](./docs/ARCHITECTURE.md) - 统一架构、模型配置、Attention 机制
+- [训练指南](./docs/TRAINING.md) - 训练时间估算、多卡训练、WandB 监控
+- [推理指南](./docs/INFERENCE.md) - 推理流程、评估方法
+- [数据集设计](./docs/DATASET.md) - 数据格式、编码流程、使用示例
+- [Token 映射机制](./docs/TOKEN_MAPPING.md) - Token 到颜色映射原理
+- [条件生成](./docs/CONDITIONAL_GENERATION.md) - 条件生成架构和使用
+
+### 参考文档
+
+- [JiT vs ControlNet](./docs/JIT_VS_CONTROLNET.md) - 架构对比分析
+- [2D RoPE Analysis](./docs/2D_ROPE_ANALYSIS.md) - 位置编码分析
+- [World v3 数据集收集](./docs/WORLD_V3_DATASET_COLLECTION.md) - 数据集收集指南
 
 ---
 
