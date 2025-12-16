@@ -18,10 +18,10 @@ ENABLE_CONDITION=false
 DATA_PATH="./data/train"
 TOKENIZER_PATH="/root/data/AI/pretrain/Qwen2.5-7B-Instruct"
 BATCH_SIZE=32
-EPOCHS=2
+EPOCHS=1 # 只训练 1 个 epoch 用于测试
 LR=5e-6
 WEIGHT_DECAY=0.01
-WARMUP_EPOCHS=1  # 测试时减少 warmup
+WARMUP_EPOCHS=1
 OUTPUT_DIR="./run/jit_v1_test"
 USE_AMP=true
 GRADIENT_ACCUMULATION_STEPS=2
@@ -31,7 +31,7 @@ LOG_INTERVAL=1
 USE_WANDB=true 
 WANDB_PROJECT="jit-diffusion-test"
 WANDB_NAME="test-run"
-WANDB_ENTITY="decalogue"  # 留空则使用 wandb login 的默认设置，或填入你的 wandb 用户名
+WANDB_ENTITY="decalogue"
 
 # 创建输出目录
 mkdir -p ${OUTPUT_DIR}
