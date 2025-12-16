@@ -1,0 +1,5 @@
+torch>=2.6.0
+torchvision>=0.23.0
+transformers>=4.57.0
+numpy>=2.2.6
+opencv-python>=4.12.0
