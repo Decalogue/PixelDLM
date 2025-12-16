@@ -109,6 +109,19 @@ def train_epoch_optimized(
     for batch_idx, batch in enumerate(pbar):
         clean = batch['clean'].to(device, non_blocking=True)
         mask = batch['mask'].to(device, non_blocking=True)  # [B, H, W] - padding mask
+
+        # Forward pass
+        # 预训练时 condition=None，模型学习从噪声恢复原始图像
+        # 条件生成时 condition 不为 None，模型学习基于条件生成目标图像
+        # 传入 mask 以支持 padding mask
+        model_ref = model.module if hasattr(model, 'module') else model
+        
+        # 获取 condition（如果存在）
+        condition = None
+        if 'condition' in batch:
+            condition_img = batch['condition'].to(device, non_blocking=True)  # [B, C, H_cond, W_cond]
+            # 将 condition 图像转换为 patches
+            condition = model_ref.image_to_patches(condition_img)  # [B, cond_patches, patch_dim]
         
         B = clean.shape[0]
         
@@ -117,12 +130,6 @@ def train_epoch_optimized(
         
         # Add noise to clean image
         noisy_target, _ = add_noise_to_timestep(clean, t)
-        
-        # Forward pass (unconditional: condition=None for pretraining)
-        # 预训练时不需要 condition，模型学习从噪声恢复原始图像
-        # 微调时可以通过 chat_template 格式化输入，实现条件生成
-        # 传入 mask 以支持 padding mask
-        model_ref = model.module if hasattr(model, 'module') else model
         
         # Forward pass with mixed precision
         # 修复 PyTorch AMP 弃用警告
@@ -142,7 +149,7 @@ def train_epoch_optimized(
             amp_context = NoOpContext()
         
         with amp_context:
-            clean_pred = model(noisy_target, t, condition=None, mask=mask)
+            clean_pred = model(noisy_target, t, condition=condition, mask=mask)
             
             # 数值稳定性检查：检查模型输出
             if torch.isnan(clean_pred).any() or torch.isinf(clean_pred).any():
@@ -157,8 +164,8 @@ def train_epoch_optimized(
                 if rank == 0:
                     print(f"Warning: clean_pred_img contains nan/inf at batch {batch_idx}, skipping...")
                 continue
-        
-        # Loss: MSE between predicted and clean image
+            
+            # Loss: MSE between predicted and clean image
             # 只对有效像素计算 loss（mask 掉 padding）
             # mask: [B, H, W] -> [B, 1, H, W] for broadcasting
             mask_expanded = mask.unsqueeze(1)  # [B, 1, H, W]
@@ -186,7 +193,7 @@ def train_epoch_optimized(
         if use_amp:
             scaler.scale(loss).backward()
         else:
-        loss.backward()
+            loss.backward()
         
         # Gradient accumulation
         if (batch_idx + 1) % gradient_accumulation_steps == 0:
@@ -227,8 +234,8 @@ def train_epoch_optimized(
                 
                 if not has_nan_inf:
                     torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)
-        optimizer.step()
-        
+                optimizer.step()
+            
             # Update learning rate scheduler (每个优化步骤后更新)
             if scheduler is not None:
                 scheduler.step()
@@ -294,6 +301,8 @@ def main():
     parser.add_argument('--tokenizer_path', type=str, default='/root/data/AI/pretrain/Qwen2.5-7B-Instruct', help='Tokenizer path')
     parser.add_argument('--use_chat_template', action='store_true', help='Use chat_template for QA pairs (for fine-tuning)')
     parser.add_argument('--max_tokens', type=int, default=None, help='Max tokens per image (None = use image capacity)')
+    parser.add_argument('--enable_condition', action='store_true', help='Enable conditional generation (requires prompt/answer pairs in data)')
+    parser.add_argument('--cond_img_size', type=int, default=None, help='Condition image size (default: 64 if enable_condition=True)')
     
     # Training args
     parser.add_argument('--batch_size', type=int, default=4, help='Batch size per GPU')
@@ -348,6 +357,8 @@ def main():
                     'warmup_epochs': args.warmup_epochs,
                     'use_amp': args.use_amp,
                     'max_grad_norm': args.max_grad_norm,
+                    'enable_condition': args.enable_condition,
+                    'cond_img_size': args.cond_img_size,
                 },
                 'dir': args.output_dir,
             }
@@ -383,6 +394,8 @@ def main():
         img_size=args.img_size,
         use_chat_template=args.use_chat_template,
         max_tokens=args.max_tokens,
+        enable_condition=args.enable_condition,
+        cond_img_size=args.cond_img_size,
     )
     
     sampler = DistributedSampler(dataset, num_replicas=world_size, rank=rank) if world_size > 1 else None
@@ -418,8 +431,8 @@ def main():
             if total_steps > warmup_steps:
                 progress = (step - warmup_steps) / (total_steps - warmup_steps)
                 return max(0.0, 0.5 * (1 + math.cos(progress * math.pi)))
-        else:
-            return 1.0
+            else:
+                return 1.0
     
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
     

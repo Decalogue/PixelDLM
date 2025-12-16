@@ -15,6 +15,8 @@ NUM_GPUS=${1:-2}
 # 训练参数
 MODEL="JiT-B/4"
 IMG_SIZE=64
+COND_IMG_SIZE=64
+ENABLE_CONDITION=false
 DATA_PATH="./data/train"
 TOKENIZER_PATH="/root/data/AI/pretrain/Qwen2.5-7B-Instruct"
 BATCH_SIZE=32  # 每张 GPU 的 batch size
@@ -26,11 +28,11 @@ OUTPUT_DIR="./run/jit_v1"
 USE_AMP=true
 GRADIENT_ACCUMULATION_STEPS=1
 MAX_GRAD_NORM=0.5
-SAVE_INTERVAL=10
-LOG_INTERVAL=10
+SAVE_INTERVAL=1
+LOG_INTERVAL=1
 USE_WANDB=true
 WANDB_PROJECT="jit-diffusion"
-WANDB_NAME="jit-v1-multi-gpu"
+WANDB_NAME="jit-v1-mgpu"
 WANDB_ENTITY="decalogue"
 
 # 创建输出目录
@@ -92,6 +94,8 @@ if [ "$USE_WANDB" = true ]; then
     echo "Wandb 运行名: ${WANDB_NAME}"
     if [ -n "$WANDB_ENTITY" ]; then
         echo "Wandb 用户名: ${WANDB_ENTITY}"
+    else
+        echo "Wandb 用户名: 使用默认（wandb login 设置）"
     fi
 fi
 echo "输出目录: ${OUTPUT_DIR}"

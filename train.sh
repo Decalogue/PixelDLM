@@ -10,27 +10,29 @@ source $(conda info --base)/etc/profile.d/conda.sh
 conda activate seeme
 
 # 训练参数
-export CUDA_VISIBLE_DEVICES=1  # 单卡训练，指定 GPU 1
+export CUDA_VISIBLE_DEVICES=1
 
 MODEL="JiT-B/4"
 IMG_SIZE=64
+COND_IMG_SIZE=64
+ENABLE_CONDITION=false
 DATA_PATH="./data/train"
 TOKENIZER_PATH="/root/data/AI/pretrain/Qwen2.5-7B-Instruct"
-BATCH_SIZE=32  # 4090 24GB 可以支持更大的 batch size，根据显存使用情况调整
+BATCH_SIZE=32
 EPOCHS=100
-LR=5e-6         # 降低学习率以避免 loss=nan
+LR=5e-6
 WEIGHT_DECAY=0.01
 WARMUP_EPOCHS=5
 OUTPUT_DIR="./run/jit_v1"
 USE_AMP=true
-GRADIENT_ACCUMULATION_STEPS=2  # 如果显存不够，可以增加梯度累积
+GRADIENT_ACCUMULATION_STEPS=2
 MAX_GRAD_NORM=0.5  # 降低梯度裁剪阈值，防止梯度爆炸
-SAVE_INTERVAL=10
-LOG_INTERVAL=10
+SAVE_INTERVAL=1
+LOG_INTERVAL=1
 USE_WANDB=true
 WANDB_PROJECT="jit-diffusion"
 WANDB_NAME="jit-v1"
-WANDB_ENTITY="decalogue"  # 留空则使用 wandb login 的默认设置，或填入你的 wandb 用户名
+WANDB_ENTITY="decalogue"
 
 # 创建输出目录
 mkdir -p ${OUTPUT_DIR}

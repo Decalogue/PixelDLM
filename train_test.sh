@@ -13,20 +13,22 @@ export CUDA_VISIBLE_DEVICES=1
 
 MODEL="JiT-B/4"
 IMG_SIZE=64
+COND_IMG_SIZE=64
+ENABLE_CONDITION=false
 DATA_PATH="./data/train"
 TOKENIZER_PATH="/root/data/AI/pretrain/Qwen2.5-7B-Instruct"
-BATCH_SIZE=32  # 测试时使用较小的 batch size
-EPOCHS=2      # 只训练 2 个 epoch 用于测试
-LR=5e-6  # 降低学习率以避免 loss=nan
+BATCH_SIZE=32
+EPOCHS=2
+LR=5e-6
 WEIGHT_DECAY=0.01
 WARMUP_EPOCHS=1  # 测试时减少 warmup
 OUTPUT_DIR="./run/jit_v1_test"
 USE_AMP=true
-GRADIENT_ACCUMULATION_STEPS=2  # 测试时减少梯度累积
+GRADIENT_ACCUMULATION_STEPS=2
 MAX_GRAD_NORM=0.5  # 降低梯度裁剪阈值，防止梯度爆炸
-SAVE_INTERVAL=1  # 每个 epoch 都保存
-LOG_INTERVAL=1   # 每个 epoch 都记录详细信息
-USE_WANDB=true   # 启用 wandb 监控
+SAVE_INTERVAL=1
+LOG_INTERVAL=1
+USE_WANDB=true 
 WANDB_PROJECT="jit-diffusion-test"
 WANDB_NAME="test-run"
 WANDB_ENTITY="decalogue"  # 留空则使用 wandb login 的默认设置，或填入你的 wandb 用户名
@@ -102,6 +104,6 @@ echo "训练测试完成！"
 echo "=========================================="
 if [ "$USE_WANDB" = true ]; then
     echo "查看 WandB 监控结果:"
-    echo "  https://wandb.ai/your-username/${WANDB_PROJECT}"
+    echo "  https://wandb.ai/decalogue/${WANDB_PROJECT}"
 fi
 echo "=========================================="

@@ -217,9 +217,7 @@ class JiT(nn.Module):
         self.pos_embed_w = nn.Parameter(torch.zeros(1, self.patch_grid_size, embed_dim))  # 列位置编码
         
         # Condition 2D position embedding (for conditional generation)
-        # 假设条件图像最大为 32×32，patch_size=4 → 8×8 = 64 patches
-        # 但为了灵活性，支持更大的条件图像
-        max_cond_grid_size = int(math.sqrt(max_cond_patches))  # 例如 16 (16×16 = 256)
+        max_cond_grid_size = int(math.sqrt(max_cond_patches))
         self.cond_pos_embed_h = nn.Parameter(torch.zeros(1, max_cond_grid_size, embed_dim))  # 条件行位置编码
         self.cond_pos_embed_w = nn.Parameter(torch.zeros(1, max_cond_grid_size, embed_dim))  # 条件列位置编码
         self.max_cond_grid_size = max_cond_grid_size
@@ -548,7 +546,7 @@ def build_jit_model(
         depth=config['depth'],
         num_heads=config['num_heads'],
         predict_clean=predict_clean,
-        max_cond_patches=256,  # 默认支持最大 256 个条件 patches（32×32 图像，patch_size=4）
+        max_cond_patches=256,  # 默认支持最大 256 个条件 patches（64*64 图像，patch_size=4）
     )
     
     return model
