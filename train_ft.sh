@@ -22,11 +22,11 @@ BATCH_SIZE=32
 EPOCHS=2  # 微调通常需要较少的 epoch
 LR=5e-6  # 微调学习率通常比预训练稍大
 WEIGHT_DECAY=0.01
-WARMUP_EPOCHS=0
-RESUME_CHECKPOINT="./run/jit_v1_test/best_model.pth"  # 从预训练模型继续
+WARMUP_EPOCHS=1
+# RESUME_CHECKPOINT="run/jit_v1_test/best_model.pth"  # 从预训练模型继续
 OUTPUT_DIR="./run/jit_v1_ft"
 USE_AMP=true
-GRADIENT_ACCUMULATION_STEPS=2
+GRADIENT_ACCUMULATION_STEPS=1
 MAX_GRAD_NORM=0.1  # 降低梯度裁剪阈值，防止梯度爆炸
 SAVE_INTERVAL=1
 LOG_INTERVAL=1
@@ -37,13 +37,6 @@ WANDB_ENTITY="decalogue"
 
 # 创建输出目录
 mkdir -p ${OUTPUT_DIR}
-
-# 检查预训练模型是否存在
-if [ ! -f "${RESUME_CHECKPOINT}" ]; then
-    echo "错误: 预训练模型不存在: ${RESUME_CHECKPOINT}"
-    echo "请先运行预训练或检查模型路径"
-    exit 1
-fi
 
 # 构建训练命令
 TRAIN_CMD="python train.py \
@@ -56,7 +49,6 @@ TRAIN_CMD="python train.py \
     --lr ${LR} \
     --weight_decay ${WEIGHT_DECAY} \
     --warmup_epochs ${WARMUP_EPOCHS} \
-    --resume ${RESUME_CHECKPOINT} \
     --output_dir ${OUTPUT_DIR} \
     --gradient_accumulation_steps ${GRADIENT_ACCUMULATION_STEPS} \
     --max_grad_norm ${MAX_GRAD_NORM} \

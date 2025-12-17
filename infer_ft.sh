@@ -18,7 +18,7 @@ COND_IMG_SIZE=64
 TOKENIZER_PATH="/root/data/AI/pretrain/Qwen2.5-7B-Instruct"
 NUM_INFERENCE_STEPS=20
 GUIDANCE_SCALE=1.0
-OUTPUT_DIR="./inference_ft_output"
+OUTPUT_DIR="./output_ft"
 SAVE_IMAGE=true
 
 # 可选：指定 prompt 或 prompt 文件

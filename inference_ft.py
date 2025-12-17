@@ -165,7 +165,7 @@ def main():
     
     # Output args
     parser.add_argument('--save_image', action='store_true', help='Save generated images')
-    parser.add_argument('--output_dir', type=str, default='./inference_ft_output', help='Output directory')
+    parser.add_argument('--output_dir', type=str, default='./output_ft', help='Output directory')
     
     args = parser.parse_args()
     

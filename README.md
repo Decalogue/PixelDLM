@@ -269,6 +269,7 @@ text = model.generate(
 ### 参考文档
 
 - [训练问题诊断](./docs/TRAINING_ISSUES.md) - 训练问题分析与解决方案
+- [统一条件生成训练方案](./docs/UNIFIED_CONDITIONAL_TRAINING.md) - 统一条件生成训练方案分析与对比
 - [混合训练分析](./docs/MIXED_TRAINING.md) - 自然图像与文本编码图像混合训练
 - [JiT vs ControlNet](./docs/JIT_VS_CONTROLNET.md) - 架构对比分析
 - [2D RoPE Analysis](./docs/2D_ROPE_ANALYSIS.md) - 位置编码分析
