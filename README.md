@@ -207,7 +207,7 @@ pip install -r requirements.txt
 sh ./train.sh
 
 # 条件生成（微调）
-sh ./train_with_condition.sh
+sh ./train_ft.sh
 ```
 
 ### 推理生成
@@ -268,6 +268,8 @@ text = model.generate(
 
 ### 参考文档
 
+- [训练问题诊断](./docs/TRAINING_ISSUES.md) - 训练问题分析与解决方案
+- [混合训练分析](./docs/MIXED_TRAINING.md) - 自然图像与文本编码图像混合训练
 - [JiT vs ControlNet](./docs/JIT_VS_CONTROLNET.md) - 架构对比分析
 - [2D RoPE Analysis](./docs/2D_ROPE_ANALYSIS.md) - 位置编码分析
 - [World v3 数据集收集](./docs/WORLD_V3_DATASET_COLLECTION.md) - 数据集收集指南

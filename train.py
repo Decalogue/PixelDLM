@@ -421,7 +421,8 @@ def main():
     # 考虑梯度累积，实际优化步数 = len(dataloader) / gradient_accumulation_steps * epochs
     effective_batches_per_epoch = max(1, len(dataloader) // args.gradient_accumulation_steps)
     total_steps = effective_batches_per_epoch * args.epochs
-    warmup_steps = effective_batches_per_epoch * args.warmup_epochs
+    # 限制 warmup_steps 最大值为 1000，避免 warmup 时间过长导致学习率持续增长
+    warmup_steps = min(effective_batches_per_epoch * args.warmup_epochs, 1000)
     
     def lr_lambda(step):
         if step < warmup_steps:
