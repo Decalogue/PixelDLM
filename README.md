@@ -1,4 +1,4 @@
-# PixelDLM 🎨 像素扩散语言模型
+# PixelDLM 🎨 像素扩散语言模型 (实验中)
 
 > **将文本直接编码为像素，用扩散模型生成文本的下一代方法**
 
@@ -269,6 +269,7 @@ text = model.generate(
 ### 参考文档
 
 - [训练问题诊断](./docs/TRAINING_ISSUES.md) - 训练问题分析与解决方案
+- [Pixel DiT 改进方案](./docs/PIXEL_DIT_IMPROVEMENTS.md) - 基于最新论文的模型架构改进建议
 - [统一条件生成训练方案](./docs/UNIFIED_CONDITIONAL_TRAINING.md) - 统一条件生成训练方案分析与对比
 - [混合训练分析](./docs/MIXED_TRAINING.md) - 自然图像与文本编码图像混合训练
 - [JiT vs ControlNet](./docs/JIT_VS_CONTROLNET.md) - 架构对比分析

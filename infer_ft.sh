@@ -21,6 +21,10 @@ GUIDANCE_SCALE=1.0
 OUTPUT_DIR="./output_ft"
 SAVE_IMAGE=true
 
+# 像素解码器参数（需要与训练时一致）
+USE_PIXEL_DECODER=true  # 是否使用 U-Net 像素解码器
+PIXEL_DECODER_DEPTH=3  # U-Net 深度
+
 # 可选：指定 prompt 或 prompt 文件
 # PROMPT="什么是人工智能？"
 # PROMPT_FILE="./data/test_prompts.txt"
@@ -38,6 +42,11 @@ INFER_CMD="python inference_ft.py \
     --num_inference_steps ${NUM_INFERENCE_STEPS} \
     --guidance_scale ${GUIDANCE_SCALE} \
     --output_dir ${OUTPUT_DIR}"
+
+# 如果启用像素解码器，添加参数
+if [ "$USE_PIXEL_DECODER" = true ]; then
+    INFER_CMD="${INFER_CMD} --use_pixel_decoder --pixel_decoder_depth ${PIXEL_DECODER_DEPTH}"
+fi
 
 # 如果指定了 prompt，添加参数
 if [ -n "${PROMPT}" ]; then
@@ -66,6 +75,10 @@ echo "推理步数: ${NUM_INFERENCE_STEPS}"
 echo "Guidance Scale: ${GUIDANCE_SCALE}"
 echo "输出目录: ${OUTPUT_DIR}"
 echo "保存图像: ${SAVE_IMAGE}"
+echo "使用像素解码器: ${USE_PIXEL_DECODER}"
+if [ "$USE_PIXEL_DECODER" = true ]; then
+    echo "像素解码器深度: ${PIXEL_DECODER_DEPTH}"
+fi
 if [ -n "${PROMPT}" ]; then
     echo "Prompt: ${PROMPT}"
 elif [ -n "${PROMPT_FILE}" ]; then

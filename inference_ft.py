@@ -16,19 +16,34 @@ from robust_token2img import RobustToken2Img
 
 
 def load_model(checkpoint_path: str, model_name: str = 'JiT-B/4', img_size: int = 64, 
-               cond_img_size: int = 64, device: str = 'cuda'):
+               cond_img_size: int = 64, use_pixel_decoder: bool = False, 
+               pixel_decoder_depth: int = 3, device: str = 'cuda'):
     """加载训练好的模型"""
     model = build_jit_model(
         model_name=model_name,
         img_size=img_size,
         predict_clean=True,
+        use_pixel_decoder=use_pixel_decoder,
+        pixel_decoder_depth=pixel_decoder_depth,
     )
     
     checkpoint = torch.load(checkpoint_path, map_location=device)
     if 'model_state_dict' in checkpoint:
-        model.load_state_dict(checkpoint['model_state_dict'])
+        state_dict = checkpoint['model_state_dict']
     else:
-        model.load_state_dict(checkpoint)
+        state_dict = checkpoint
+    
+    # 过滤掉推理时不需要的键（如频率损失函数的权重）
+    # 这些键在训练时被添加到模型中，但推理时不需要
+    filtered_state_dict = {}
+    for key, value in state_dict.items():
+        # 跳过频率损失函数相关的键
+        if 'freq_loss_fn' in key:
+            continue
+        filtered_state_dict[key] = value
+    
+    # 加载过滤后的状态字典（允许缺少一些键）
+    model.load_state_dict(filtered_state_dict, strict=False)
     
     model = model.to(device)
     model.eval()
@@ -108,7 +123,17 @@ def inference_conditional(
     condition_img, cond_metadata = encode_prompt_to_condition(
         prompt, token_encoder, cond_img_size, device
     )
-    print(f"Condition tokens: {cond_metadata.get('num_tokens', 'N/A')}")
+    cond_tokens = cond_metadata.get('num_tokens', 'N/A')
+    print(f"Condition tokens: {cond_tokens}")
+    
+    # 调试：检查条件 patches
+    condition_patches = model.image_to_patches(condition_img)
+    cond_patches_count = condition_patches.shape[1]
+    cond_max_patches = model.cond_max_patches if hasattr(model, 'cond_max_patches') else model._cond_max_patches if hasattr(model, '_cond_max_patches') else 'N/A'
+    print(f"Condition patches: {cond_patches_count} (max: {cond_max_patches})")
+    if cond_patches_count < cond_max_patches:
+        padding_ratio = (cond_max_patches - cond_patches_count) / cond_max_patches
+        print(f"  ⚠️  警告: 条件 patches 有 {padding_ratio*100:.1f}% 是 padding，可能影响条件信息传递")
     
     # Generate answer image (conditional generation)
     generated_img = generate_answer(
@@ -152,6 +177,8 @@ def main():
     parser.add_argument('--model', type=str, default='JiT-B/4', help='Model name (JiT-B/4 for 64×64, JiT-B/16 for 256×256)')
     parser.add_argument('--img_size', type=int, default=64, help='Answer image size')
     parser.add_argument('--cond_img_size', type=int, default=64, help='Condition image size')
+    parser.add_argument('--use_pixel_decoder', action='store_true', help='Use U-Net pixel decoder (DiP)')
+    parser.add_argument('--pixel_decoder_depth', type=int, default=3, help='U-Net decoder depth')
     
     # Data args
     parser.add_argument('--tokenizer_path', type=str, default='/root/data/AI/pretrain/Qwen2.5-7B-Instruct', help='Tokenizer path')
@@ -182,7 +209,21 @@ def main():
     
     # Load model
     print(f"Loading model from {args.checkpoint}...")
-    model = load_model(args.checkpoint, args.model, args.img_size, args.cond_img_size, device)
+    print(f"  Model: {args.model}")
+    print(f"  Image size: {args.img_size}×{args.img_size}")
+    print(f"  Condition image size: {args.cond_img_size}×{args.cond_img_size}")
+    print(f"  Use pixel decoder: {args.use_pixel_decoder}")
+    if args.use_pixel_decoder:
+        print(f"  Pixel decoder depth: {args.pixel_decoder_depth}")
+    model = load_model(
+        args.checkpoint, 
+        args.model, 
+        args.img_size, 
+        args.cond_img_size,
+        use_pixel_decoder=args.use_pixel_decoder,
+        pixel_decoder_depth=args.pixel_decoder_depth,
+        device=device
+    )
     print("Model loaded successfully!")
     
     # Get prompts
@@ -199,8 +240,8 @@ def main():
         # Default prompts for testing
         prompts = [
             "什么是人工智能？",
-            "解释一下深度学习的基本原理。",
-            "如何训练一个语言模型？",
+            "5+5等于多少？",
+            "如何写出一本好书？",
         ]
         num_generations = len(prompts)
         print(f"未指定 prompt，使用默认测试 prompts")

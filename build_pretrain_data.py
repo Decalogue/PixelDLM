@@ -42,8 +42,8 @@ def load_jsonl_file(jsonl_path: str) -> List[Dict[str, str]]:
             for line_num, line in enumerate(f, 1):
                 line = line.strip()
                 if not line:
-                    continue
-                
+                continue
+        
                 try:
                     data = json.loads(line)
                     if 'text' in data and isinstance(data['text'], str):
@@ -52,7 +52,7 @@ def load_jsonl_file(jsonl_path: str) -> List[Dict[str, str]]:
                             texts.append({'text': text})
                         else:
                             skipped_lines += 1
-                    else:
+            else:
                         skipped_lines += 1
                         if line_num <= 10:  # 只显示前10个警告
                             print(f"警告: 第 {line_num} 行缺少 'text' 字段或格式不正确，跳过")
@@ -61,9 +61,9 @@ def load_jsonl_file(jsonl_path: str) -> List[Dict[str, str]]:
                     if line_num <= 10:  # 只显示前10个错误
                         print(f"警告: 第 {line_num} 行 JSON 解析失败: {e}，跳过")
                     continue
-    except Exception as e:
+            except Exception as e:
         raise IOError(f"读取文件 {jsonl_path} 时出错: {e}")
-    
+            
     if skipped_lines > 0:
         print(f"跳过 {skipped_lines} 行无效数据")
     
@@ -122,7 +122,7 @@ def process_text_item(
         
         if processed_text:
             return [{'text': processed_text}]
-        
+    
     except Exception as e:
         # Tokenize 失败，跳过这个文本
         pass
@@ -170,7 +170,7 @@ def build_pretrain_dataset(
     print("=" * 60)
     
     text_items = load_jsonl_file(jsonl_path)
-    
+        
     # 收集所有样本
     all_samples = []
     
@@ -218,8 +218,8 @@ def build_pretrain_dataset(
         batch = train_samples[i:i + batch_size]
         batch_file = os.path.join(train_dir, f'train_{train_file_count:04d}.json')
         try:
-            with open(batch_file, 'w', encoding='utf-8') as f:
-                json.dump(batch, f, ensure_ascii=False, indent=2)
+        with open(batch_file, 'w', encoding='utf-8') as f:
+            json.dump(batch, f, ensure_ascii=False, indent=2)
             train_file_count += 1
         except Exception as e:
             print(f"警告: 保存训练集文件 {batch_file} 失败: {e}")
@@ -231,8 +231,8 @@ def build_pretrain_dataset(
         batch = val_samples[i:i + batch_size]
         batch_file = os.path.join(val_dir, f'val_{val_file_count:04d}.json')
         try:
-            with open(batch_file, 'w', encoding='utf-8') as f:
-                json.dump(batch, f, ensure_ascii=False, indent=2)
+        with open(batch_file, 'w', encoding='utf-8') as f:
+            json.dump(batch, f, ensure_ascii=False, indent=2)
             val_file_count += 1
         except Exception as e:
             print(f"警告: 保存验证集文件 {batch_file} 失败: {e}")

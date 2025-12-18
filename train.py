@@ -30,6 +30,14 @@ except ImportError:
 from model import build_jit_model
 from dataset import TokenImageDataset
 
+# 导入频率感知损失
+try:
+    from frequency_loss import FrequencyAwareLoss
+    HAS_FREQ_LOSS = True
+except ImportError:
+    HAS_FREQ_LOSS = False
+    print("警告: frequency_loss 模块未找到，将使用标准 MSE 损失")
+
 
 def setup_distributed():
     """Setup distributed training"""
@@ -157,6 +165,14 @@ def train_epoch_optimized(
                     print(f"Warning: model output contains nan/inf at batch {batch_idx}, skipping...")
                 continue
             
+            # 判断模型输出格式
+            # 如果使用像素解码器，输出是图像 [B, C, H, W]
+            # 否则输出是 patches [B, num_patches, patch_dim]
+            if clean_pred.dim() == 4:
+                # 图像格式（使用像素解码器）
+                clean_pred_img = clean_pred
+            else:
+                # Patch 格式（不使用像素解码器）
             clean_pred_img = model_ref.patches_to_image(clean_pred)
             
             # 数值稳定性检查：检查图像
@@ -164,9 +180,12 @@ def train_epoch_optimized(
                 if rank == 0:
                     print(f"Warning: clean_pred_img contains nan/inf at batch {batch_idx}, skipping...")
                 continue
+        
+            # 确保图像值在 [0, 1] 范围内
+            clean_pred_img = torch.clamp(clean_pred_img, 0, 1)
+            clean_clamped = torch.clamp(clean, 0, 1)
             
-            # Loss: MSE between predicted and clean image
-            # 只对有效像素计算 loss（mask 掉 padding）
+            # Loss: 使用频率感知损失或标准 MSE
             # mask: [B, H, W] -> [B, 1, H, W] for broadcasting
             mask_expanded = mask.unsqueeze(1)  # [B, 1, H, W]
             
@@ -177,10 +196,17 @@ def train_epoch_optimized(
                     print(f"Warning: all pixels are padding at batch {batch_idx}, skipping...")
                 continue
             
-            # 计算 masked loss
-            diff = (clean_pred_img - clean) ** 2
+            # 检查是否使用频率感知损失
+            use_freq_loss = getattr(model_ref, 'use_freq_loss', False) and HAS_FREQ_LOSS
+            if use_freq_loss and hasattr(model_ref, 'freq_loss_fn'):
+                # 使用频率感知损失
+                loss = model_ref.freq_loss_fn(clean_pred_img, clean_clamped, mask)
+            else:
+                # 使用标准 MSE 损失
+                diff = (clean_pred_img - clean_clamped) ** 2
             masked_diff = diff * mask_expanded
             loss = masked_diff.sum() / mask_sum  # 归一化
+            
             loss = loss / gradient_accumulation_steps
             
             # 数值稳定性检查：检查 loss
@@ -193,16 +219,18 @@ def train_epoch_optimized(
         if use_amp:
             scaler.scale(loss).backward()
         else:
-            loss.backward()
+        loss.backward()
         
         # Gradient accumulation
+        # 初始化 grad_norm（用于后续记录）
+        grad_norm = 0.0
+        
         if (batch_idx + 1) % gradient_accumulation_steps == 0:
             if use_amp:
                 # Gradient clipping
                 scaler.unscale_(optimizer)
                 
                 # 检查梯度是否包含 nan/inf
-                grad_norm = 0.0
                 has_nan_inf = False
                 for name, param in model.named_parameters():
                     if param.grad is not None:
@@ -211,13 +239,12 @@ def train_epoch_optimized(
                                 print(f"Warning: gradient contains nan/inf in {name}, zeroing...")
                             param.grad.zero_()
                             has_nan_inf = True
-                        else:
-                            param_norm = param.grad.data.norm(2)
-                            grad_norm += param_norm.item() ** 2
                 
                 if not has_nan_inf:
-                    grad_norm = grad_norm ** (1. / 2)
-                    torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)
+                    # clip_grad_norm_ 返回裁剪后的梯度范数
+                    grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)
+                else:
+                    grad_norm = 0.0
                 
                 scaler.step(optimizer)
                 scaler.update()
@@ -233,34 +260,32 @@ def train_epoch_optimized(
                             has_nan_inf = True
                 
                 if not has_nan_inf:
-                    torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)
-                optimizer.step()
-            
+                    # clip_grad_norm_ 返回裁剪后的梯度范数
+                    grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)
+                else:
+                    grad_norm = 0.0
+        optimizer.step()
+        
             # Update learning rate scheduler (每个优化步骤后更新)
             if scheduler is not None:
                 scheduler.step()
             
             optimizer.zero_grad()
         
-        # 只有在 loss 有效时才更新统计信息
+            # 只有在 loss 有效时才更新统计信息（在梯度累积步骤中记录）
         if not (torch.isnan(loss) or torch.isinf(loss)):
             # Log metrics to wandb
             if rank == 0 and use_wandb and WANDB_AVAILABLE:
                 current_lr = scheduler.get_last_lr()[0] if scheduler else optimizer.param_groups[0]['lr']
                 loss_value = loss.item() * gradient_accumulation_steps
                 
-                # Calculate gradient norm
-                total_norm = 0.0
-                for p in model.parameters():
-                    if p.grad is not None:
-                        param_norm = p.grad.data.norm(2)
-                        total_norm += param_norm.item() ** 2
-                total_norm = total_norm ** (1. / 2)
+                    # 使用在梯度裁剪时计算的 grad_norm（裁剪后的值）
+                    logged_grad_norm = grad_norm
                 
                 wandb.log({
                     'train/loss': loss_value,
                     'train/learning_rate': current_lr,
-                    'train/grad_norm': total_norm,
+                        'train/grad_norm': logged_grad_norm,
                     'train/step': global_step,
                 }, step=global_step)
                 
@@ -303,6 +328,14 @@ def main():
     parser.add_argument('--max_tokens', type=int, default=None, help='Max tokens per image (None = use image capacity)')
     parser.add_argument('--enable_condition', action='store_true', help='Enable conditional generation (requires prompt/answer pairs in data)')
     parser.add_argument('--cond_img_size', type=int, default=None, help='Condition image size (default: 64 if enable_condition=True)')
+    
+    # Pixel decoder and frequency loss
+    parser.add_argument('--use_pixel_decoder', action='store_true', help='Use U-Net pixel decoder (DiP)')
+    parser.add_argument('--pixel_decoder_depth', type=int, default=3, help='U-Net decoder depth')
+    parser.add_argument('--use_freq_loss', action='store_true', help='Use frequency-aware loss (DeCo)')
+    parser.add_argument('--freq_loss_quality', type=int, default=75, help='JPEG quality for frequency loss (1-100)')
+    parser.add_argument('--freq_loss_weight', type=float, default=0.5, help='Weight for frequency loss (0-1)')
+    parser.add_argument('--mse_loss_weight', type=float, default=0.5, help='Weight for MSE loss (0-1)')
     
     # Training args
     parser.add_argument('--batch_size', type=int, default=4, help='Batch size per GPU')
@@ -359,6 +392,12 @@ def main():
                     'max_grad_norm': args.max_grad_norm,
                     'enable_condition': args.enable_condition,
                     'cond_img_size': args.cond_img_size,
+                    'use_pixel_decoder': args.use_pixel_decoder,
+                    'pixel_decoder_depth': args.pixel_decoder_depth if args.use_pixel_decoder else None,
+                    'use_freq_loss': args.use_freq_loss,
+                    'freq_loss_quality': args.freq_loss_quality if args.use_freq_loss else None,
+                    'freq_loss_weight': args.freq_loss_weight if args.use_freq_loss else None,
+                    'mse_loss_weight': args.mse_loss_weight if args.use_freq_loss else None,
                 },
                 'dir': args.output_dir,
             }
@@ -380,8 +419,27 @@ def main():
         model_name=args.model,
         img_size=args.img_size,
         predict_clean=args.predict_clean,
+        use_pixel_decoder=args.use_pixel_decoder,
+        pixel_decoder_depth=args.pixel_decoder_depth,
     )
     model = model.to(device)
+    
+    # 添加频率感知损失（如果启用）
+    if args.use_freq_loss and HAS_FREQ_LOSS:
+        model.freq_loss_fn = FrequencyAwareLoss(
+            quality=args.freq_loss_quality,
+            use_freq_loss=True,
+            mse_weight=args.mse_loss_weight,
+            freq_weight=args.freq_loss_weight,
+        ).to(device)
+        model.use_freq_loss = True
+        if rank == 0:
+            print(f"启用频率感知损失 (quality={args.freq_loss_quality}, "
+                  f"mse_weight={args.mse_loss_weight}, freq_weight={args.freq_loss_weight})")
+    else:
+        model.use_freq_loss = False
+        if rank == 0 and args.use_freq_loss:
+            print("警告: 频率感知损失未启用（模块未找到）")
     
     # Distributed model
     if world_size > 1:
@@ -432,8 +490,8 @@ def main():
             if total_steps > warmup_steps:
                 progress = (step - warmup_steps) / (total_steps - warmup_steps)
                 return max(0.0, 0.5 * (1 + math.cos(progress * math.pi)))
-            else:
-                return 1.0
+        else:
+            return 1.0
     
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
     

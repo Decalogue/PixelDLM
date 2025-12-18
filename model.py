@@ -4,6 +4,13 @@ import torch.nn as nn
 import torch.nn.functional as F
 from typing import Optional, Tuple
 
+# 导入像素级解码器
+try:
+    from pixel_decoder import PixelDecoderUNet
+    HAS_PIXEL_DECODER = True
+except ImportError:
+    HAS_PIXEL_DECODER = False
+
 
 class RMSNorm(nn.Module):
     """RMS Normalization"""
@@ -186,6 +193,8 @@ class JiT(nn.Module):
         proj_dropout: float = 0.0,
         predict_clean: bool = True,
         max_cond_patches: int = 256,  # 条件图像的最大 patches 数
+        use_pixel_decoder: bool = False,  # 是否使用像素级解码器（U-Net）
+        pixel_decoder_depth: int = 3,  # U-Net 深度
     ):
         super().__init__()
         
@@ -194,6 +203,7 @@ class JiT(nn.Module):
         self.in_channels = in_channels
         self.embed_dim = embed_dim
         self.predict_clean = predict_clean
+        self.use_pixel_decoder = use_pixel_decoder and HAS_PIXEL_DECODER
         
         # Calculate number of patches
         self.num_patches = (img_size // patch_size) ** 2
@@ -237,6 +247,19 @@ class JiT(nn.Module):
         # Output projection
         self.output_proj = nn.Linear(embed_dim, self.patch_dim)
         self.proj_drop = nn.Dropout(proj_dropout)
+        
+        # 像素级解码器（U-Net，基于 DiP）
+        if self.use_pixel_decoder:
+            self.pixel_decoder = PixelDecoderUNet(
+                img_size=img_size,
+                in_channels=in_channels,
+                out_channels=in_channels,
+                base_channels=64,
+                cond_dim=embed_dim,
+                depth=pixel_decoder_depth,
+            )
+        else:
+            self.pixel_decoder = None
         
         # Initialize
         nn.init.normal_(self.pos_embed_h, std=0.02)
@@ -370,7 +393,8 @@ class JiT(nn.Module):
             mask: Image mask [B, H, W] - 1 表示有效像素，0 表示 padding (optional)
         
         Returns:
-            Predicted clean image patches [B, num_patches, patch_dim]
+            - 如果 use_pixel_decoder=False: Predicted clean image patches [B, num_patches, patch_dim]
+            - 如果 use_pixel_decoder=True: Refined image [B, C, H, W]
         """
         # Convert to patches if needed
         if x.dim() == 4:
@@ -445,10 +469,10 @@ class JiT(nn.Module):
             x = block(x, t_embed, attention_mask=attention_mask)
         
         # Extract target patches (后 num_patches 个位置，固定)
-        x = x[:, self.cond_max_patches:, :]  # [B, num_patches, embed_dim]
+        x_target_features = x[:, self.cond_max_patches:, :]  # [B, num_patches, embed_dim]
         
         # Output projection
-        x = self.output_proj(x)
+        x = self.output_proj(x_target_features)
         x = self.proj_drop(x)
         
         # 如果提供了 mask，将 padding patches 的输出置零
@@ -458,6 +482,21 @@ class JiT(nn.Module):
             target_mask_expanded = target_mask.unsqueeze(-1)  # [B, num_patches, 1]
             x = x * target_mask_expanded
         
+        # 如果使用像素级解码器，进行细化（Post-hoc Refinement，DiP 方案）
+        if self.use_pixel_decoder and self.pixel_decoder is not None:
+            # 转换为图像格式 [B, C, H, W]
+            img = self.patches_to_image(x)
+            
+            # 获取 DiT 的中间特征作为条件（使用 Transformer 输出的特征，而不是 output_proj 后的）
+            # x_target_features: [B, num_patches, embed_dim] - 这是 Transformer blocks 的输出
+            condition_features = x_target_features  # [B, num_patches, embed_dim]
+            
+            # U-Net 细化
+            img = self.pixel_decoder(img, condition=condition_features)
+            
+            return img
+        
+        # 不使用像素解码器时，返回 patch 格式（保持向后兼容）
         return x
     
     def generate(
@@ -492,7 +531,17 @@ class JiT(nn.Module):
                 t = torch.full((B,), step, dtype=torch.long, device=device)
                 
                 # Predict clean data (统一架构：forward 内部处理条件)
-                x_0_pred_target = self.forward(x_target, t, condition=condition)  # [B, num_patches, patch_dim]
+                x_0_pred = self.forward(x_target, t, condition=condition)
+                
+                # 判断输出格式
+                if x_0_pred.dim() == 4:
+                    # 图像格式（使用像素解码器）
+                    x_0_pred_img = x_0_pred
+                    # 需要转换回 patches 用于 DDIM 更新
+                    x_0_pred_target = self.image_to_patches(x_0_pred_img)
+                else:
+                    # Patch 格式（不使用像素解码器）
+                    x_0_pred_target = x_0_pred
                 
                 # DDIM update
                 alpha = 1.0 - (step / num_inference_steps)
@@ -502,6 +551,11 @@ class JiT(nn.Module):
                     x_target = x_0_pred_target
         
         # Convert to image
+        if self.use_pixel_decoder:
+            # 如果使用像素解码器，最后一次 forward 已经返回图像
+            img = self.forward(x_target, torch.zeros(B, dtype=torch.long, device=device), condition=condition)
+            if img.dim() == 4:
+                return img
         img = self.patches_to_image(x_target)
         
         return img
@@ -511,6 +565,8 @@ def build_jit_model(
     model_name: str = 'JiT-B/4',
     img_size: int = 64,
     predict_clean: bool = True,
+    use_pixel_decoder: bool = False,
+    pixel_decoder_depth: int = 3,
 ) -> JiT:
     """
     Build JiT model from config
@@ -547,6 +603,8 @@ def build_jit_model(
         num_heads=config['num_heads'],
         predict_clean=predict_clean,
         max_cond_patches=256,  # 默认支持最大 256 个条件 patches（64*64 图像，patch_size=4）
+        use_pixel_decoder=use_pixel_decoder,
+        pixel_decoder_depth=pixel_decoder_depth,
     )
     
     return model

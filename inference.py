@@ -15,19 +15,34 @@ from model import build_jit_model
 from robust_token2img import RobustToken2Img
 
 
-def load_model(checkpoint_path: str, model_name: str = 'JiT-B/4', img_size: int = 64, device: str = 'cuda'):
+def load_model(checkpoint_path: str, model_name: str = 'JiT-B/4', img_size: int = 64, 
+               use_pixel_decoder: bool = False, pixel_decoder_depth: int = 3, device: str = 'cuda'):
     """加载训练好的模型"""
     model = build_jit_model(
         model_name=model_name,
         img_size=img_size,
         predict_clean=True,
+        use_pixel_decoder=use_pixel_decoder,
+        pixel_decoder_depth=pixel_decoder_depth,
     )
     
     checkpoint = torch.load(checkpoint_path, map_location=device)
     if 'model_state_dict' in checkpoint:
-        model.load_state_dict(checkpoint['model_state_dict'])
+        state_dict = checkpoint['model_state_dict']
     else:
-        model.load_state_dict(checkpoint)
+        state_dict = checkpoint
+    
+    # 过滤掉推理时不需要的键（如频率损失函数的权重）
+    # 这些键在训练时被添加到模型中，但推理时不需要
+    filtered_state_dict = {}
+    for key, value in state_dict.items():
+        # 跳过频率损失函数相关的键
+        if 'freq_loss_fn' in key:
+            continue
+        filtered_state_dict[key] = value
+    
+    # 加载过滤后的状态字典（允许缺少一些键）
+    model.load_state_dict(filtered_state_dict, strict=False)
     
     model = model.to(device)
     model.eval()
@@ -123,6 +138,8 @@ def main():
     parser.add_argument('--checkpoint', type=str, required=True, help='Path to model checkpoint')
     parser.add_argument('--model', type=str, default='JiT-B/4', help='Model name (JiT-B/4 for 64×64, JiT-B/16 for 256×256)')
     parser.add_argument('--img_size', type=int, default=64, help='Image size')
+    parser.add_argument('--use_pixel_decoder', action='store_true', help='Use U-Net pixel decoder (DiP)')
+    parser.add_argument('--pixel_decoder_depth', type=int, default=3, help='U-Net decoder depth')
     
     # Data args
     parser.add_argument('--tokenizer_path', type=str, default='/root/data/AI/pretrain/Qwen2.5-7B-Instruct', help='Tokenizer path')
@@ -151,7 +168,19 @@ def main():
     
     # Load model
     print(f"Loading model from {args.checkpoint}...")
-    model = load_model(args.checkpoint, args.model, args.img_size, device)
+    print(f"  Model: {args.model}")
+    print(f"  Image size: {args.img_size}×{args.img_size}")
+    print(f"  Use pixel decoder: {args.use_pixel_decoder}")
+    if args.use_pixel_decoder:
+        print(f"  Pixel decoder depth: {args.pixel_decoder_depth}")
+    model = load_model(
+        args.checkpoint, 
+        args.model, 
+        args.img_size,
+        use_pixel_decoder=args.use_pixel_decoder,
+        pixel_decoder_depth=args.pixel_decoder_depth,
+        device=device
+    )
     print("Model loaded successfully!")
     
     # Inference (unconditional generation)

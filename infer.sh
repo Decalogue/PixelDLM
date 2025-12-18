@@ -19,6 +19,10 @@ NUM_INFERENCE_STEPS=20
 OUTPUT_DIR="./output"
 SAVE_IMAGE=true
 
+# 像素解码器参数（需要与训练时一致）
+USE_PIXEL_DECODER=false  # 是否使用 U-Net 像素解码器
+PIXEL_DECODER_DEPTH=3  # U-Net 深度
+
 # 创建输出目录
 mkdir -p ${OUTPUT_DIR}
 
@@ -30,6 +34,11 @@ INFER_CMD="python inference.py \
     --tokenizer_path ${TOKENIZER_PATH} \
     --num_inference_steps ${NUM_INFERENCE_STEPS} \
     --output_dir ${OUTPUT_DIR}"
+
+# 如果启用像素解码器，添加参数
+if [ "$USE_PIXEL_DECODER" = true ]; then
+    INFER_CMD="${INFER_CMD} --use_pixel_decoder --pixel_decoder_depth ${PIXEL_DECODER_DEPTH}"
+fi
 
 # 如果指定了问题，添加参数
 if [ -n "${PROMPT}" ]; then
@@ -56,6 +65,10 @@ echo "图像尺寸: ${IMG_SIZE}×${IMG_SIZE}"
 echo "推理步数: ${NUM_INFERENCE_STEPS}"
 echo "输出目录: ${OUTPUT_DIR}"
 echo "保存图像: ${SAVE_IMAGE}"
+echo "使用像素解码器: ${USE_PIXEL_DECODER}"
+if [ "$USE_PIXEL_DECODER" = true ]; then
+    echo "像素解码器深度: ${PIXEL_DECODER_DEPTH}"
+fi
 echo "=========================================="
 echo
 
