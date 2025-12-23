@@ -173,7 +173,7 @@ def train_epoch_optimized(
                 clean_pred_img = clean_pred
             else:
                 # Patch 格式（不使用像素解码器）
-            clean_pred_img = model_ref.patches_to_image(clean_pred)
+                clean_pred_img = model_ref.patches_to_image(clean_pred)
             
             # 数值稳定性检查：检查图像
             if torch.isnan(clean_pred_img).any() or torch.isinf(clean_pred_img).any():
@@ -204,8 +204,8 @@ def train_epoch_optimized(
             else:
                 # 使用标准 MSE 损失
                 diff = (clean_pred_img - clean_clamped) ** 2
-            masked_diff = diff * mask_expanded
-            loss = masked_diff.sum() / mask_sum  # 归一化
+                masked_diff = diff * mask_expanded
+                loss = masked_diff.sum() / mask_sum  # 归一化
             
             loss = loss / gradient_accumulation_steps
             
@@ -219,7 +219,7 @@ def train_epoch_optimized(
         if use_amp:
             scaler.scale(loss).backward()
         else:
-        loss.backward()
+            loss.backward()
         
         # Gradient accumulation
         # 初始化 grad_norm（用于后续记录）
@@ -264,31 +264,32 @@ def train_epoch_optimized(
                     grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)
                 else:
                     grad_norm = 0.0
-        optimizer.step()
+            optimizer.step()
         
             # Update learning rate scheduler (每个优化步骤后更新)
             if scheduler is not None:
                 scheduler.step()
             
             optimizer.zero_grad()
-        
+            
             # 只有在 loss 有效时才更新统计信息（在梯度累积步骤中记录）
-        if not (torch.isnan(loss) or torch.isinf(loss)):
-            # Log metrics to wandb
-            if rank == 0 and use_wandb and WANDB_AVAILABLE:
-                current_lr = scheduler.get_last_lr()[0] if scheduler else optimizer.param_groups[0]['lr']
-                loss_value = loss.item() * gradient_accumulation_steps
-                
+            if not (torch.isnan(loss) or torch.isinf(loss)):
+                # Log metrics to wandb
+                if rank == 0 and use_wandb and WANDB_AVAILABLE:
+                    current_lr = scheduler.get_last_lr()[0] if scheduler else optimizer.param_groups[0]['lr']
+                    loss_value = loss.item() * gradient_accumulation_steps
+                    
                     # 使用在梯度裁剪时计算的 grad_norm（裁剪后的值）
                     logged_grad_norm = grad_norm
-                
-                wandb.log({
-                    'train/loss': loss_value,
-                    'train/learning_rate': current_lr,
+                    
+                    wandb.log({
+                        'train/loss': loss_value,
+                        'train/learning_rate': current_lr,
                         'train/grad_norm': logged_grad_norm,
-                    'train/step': global_step,
-                }, step=global_step)
+                        'train/step': global_step,
+                    }, step=global_step)
                 
+                # 更新 global_step（无论是否使用 wandb）
                 global_step += 1
         
         # 只有在 loss 有效时才更新统计信息
@@ -297,7 +298,7 @@ def train_epoch_optimized(
         num_batches += 1
         
         if rank == 0:
-                pbar.set_postfix({'loss': loss.item() * gradient_accumulation_steps})
+            pbar.set_postfix({'loss': loss.item() * gradient_accumulation_steps})
     
     avg_loss = total_loss / num_batches if num_batches > 0 else 0.0
     
@@ -490,8 +491,8 @@ def main():
             if total_steps > warmup_steps:
                 progress = (step - warmup_steps) / (total_steps - warmup_steps)
                 return max(0.0, 0.5 * (1 + math.cos(progress * math.pi)))
-        else:
-            return 1.0
+            else:
+                return 1.0
     
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
     

@@ -18,7 +18,7 @@ ENABLE_CONDITION=false
 DATA_PATH="./data/train"
 TOKENIZER_PATH="/root/data/AI/pretrain/Qwen2.5-7B-Instruct"
 BATCH_SIZE=32
-EPOCHS=1 # 只训练 1 个 epoch 用于测试
+EPOCHS=10 # 只训练 1 个 epoch 用于测试
 LR=1e-5
 WEIGHT_DECAY=0.01
 WARMUP_EPOCHS=1
@@ -39,8 +39,8 @@ USE_PIXEL_DECODER=true  # 是否使用 U-Net 像素解码器（效果显著，�
 PIXEL_DECODER_DEPTH=3  # U-Net 深度
 USE_FREQ_LOSS=true  # 是否使用频率感知损失（推荐先启用，计算开销小 +5%，通用性强）
 FREQ_LOSS_QUALITY=75  # JPEG 质量 (1-100)，仅影响损失计算权重，不影响 token-color 映射
-FREQ_LOSS_WEIGHT=0.5  # 频率损失权重
-MSE_LOSS_WEIGHT=0.5  # MSE 损失权重
+FREQ_LOSS_WEIGHT=0.3  # 频率损失权重
+MSE_LOSS_WEIGHT=0.7  # MSE 损失权重
 
 # 创建输出目录
 mkdir -p ${OUTPUT_DIR}
